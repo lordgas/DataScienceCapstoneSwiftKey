@@ -1,0 +1,11 @@
+setwd("~/Documents/Oscar/CourseraCapstone/en_US/")
+con <- file("en_US.twitter.txt", "r") 
+twitterline <-readLines(con)
+length(twitterline)
+length(grep("love",twitterline))/length(grep("hate",twitterline))
+twitterline[grep("biostats",twitterline)]
+length(grep("A computer once beat me at chess, but it was no match for me at kickboxing",twitterline))
+max(nchar(twitterline))
+blogsline<-readLines(file("en_US.blogs.txt", "r") )
+max(nchar(blogsline))
+newsline<-readLines(file("en_US.news.txt", "r") )
