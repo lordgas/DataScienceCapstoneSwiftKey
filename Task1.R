@@ -6,32 +6,6 @@ require(RWeka)
 require(magrittr)
 
 require(dplyr)
-setwd("~/Documents/Oscar//CourseraCapstone//en_US")
-
-
-
-# includes in the output file a sample of the lines in the input file given the inclusion  probability 
-sampleFile<-function(filename,  probability, outfile)
-{
-  numlines<-countLines(filename)
-  #numlines<-100
-  samplevector<-rbinom(numlines, 1,probability)
-  con <- file(filename, "r") 
-  sample<-character(0)
-  conw <- file(outfile, "w")
-  for (i in samplevector)
-  {
-    line <-readLines(con, 1) ## Read in the next line of text
-    if (i!=0)
-    {
-      writeLines(line,conw)
-    }
-  }
-  close(con) ## It's important to close the connection when you are done
-  close(conw)  
-
-}
-
 
 #' Ngrams tokenizer
 #' 
@@ -79,13 +53,13 @@ ngram_tokenizer <- function(n = 1L, skip_word_none = TRUE, skip_word_number = FA
 
 tokenizeFile <- function(filename,n)
 {
- unigramtokenizer<-ngram_tokenizer(n)
+  unigramtokenizer<-ngram_tokenizer(n)
   
- tokens<-character(0)
- con <- file(filename, "r") 
+  tokens<-character(0)
+  con <- file(filename, "r") 
   text<-readLines(con)
- 
- for (line in text)
+  
+  for (line in text)
   {
     tokens<-c(tokens,unigramtokenizer(line))
   }
@@ -93,13 +67,10 @@ tokenizeFile <- function(filename,n)
   tokens
 }
 
-getCorpus<-function(filename)
+getDTM<-function(filename)
 {
-  con <- file(filename, "r") 
-  text<-readLines(con)
-  close(con)
-  
-  text %>% data.frame()%>% DataframeSource() %>%VCorpus %>%tm_map(stripWhiteSpace)
-}  
-
-
+ text<-readRDS(file = filename)
+ docs<-tm_map(VCorpus(DataframeSource(head(data.frame(text)))),content_transformer(tolower), lazy=TRUE)
+ dtm<-DocumentTermMatrix(docs)
+ dtm
+ }  
