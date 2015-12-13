@@ -1,0 +1,65 @@
+---
+title: "Milestone Report"
+author: "lord"
+date: "13 December 2015"
+output: html_document
+---
+
+
+
+# getting and cleaning the data
+
+## tokenization
+
+command taking a text file and returning token list (one per line)
+
+```
+head -n100 en_US.twitter.txt|tr -sc 'A-Za-z' ' '|tr "[:upper:]" "[:lower:]"|tr -s ' ' ' '| tr -sc 'A-Za-z' '\n'
+```
+
+command to cleanup a file. 
+
+* match only alphabetic characters, thus removing puntuation and strange characters
+* lower case everything to normalise
+* remove extra spaces
+* remove single letter occurrences except 'i', 'a' (TODO)
+
+```
+cat en_US.twitter.txt|  tr -sc 'A-Za-z' ' '|tr "[:upper:]" "[:lower:]"| tr -s ' ' ' ' > clean_twitter.txt
+```
+
+
+command taking a file and  returning token list (one per line)
+
+```
+head -n100 en_US.twitter.txt|tr -sc 'A-Za-z' ' '|tr "[:upper:]" "[:lower:]"|tr -s ' ' ' '| tr -sc 'A-Za-z' '\n'
+```
+
+# profanity filterning
+
+We download a list of profane terms to be used as a filter.
+
+We choose the following list
+<https://github.com/shutterstock/List-of-Dirty-Naughty-Obscene-and-Otherwise-Bad-Words/blob/master/en>
+
+For each file, we filter each entry (i.e. line) containing at least one profane term.
+```
+cat en_US.twitter.txt| grep -vf en_profane_terms.txt en_US.twitter.txt
+
+```
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r}
+summary(cars)
+```
+
+You can also embed plots, for example:
+
+```{r, echo=FALSE}
+plot(cars)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
