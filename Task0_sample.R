@@ -1,11 +1,4 @@
-require(R.utils)
 
-require(stringi)
-require(tm)
-require(RWeka)
-require(magrittr)
-
-require(dplyr)
 setwd("~/Documents/Oscar//CourseraCapstone/en_US/")
 
 
