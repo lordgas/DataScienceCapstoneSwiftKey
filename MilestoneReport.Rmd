@@ -1,0 +1,195 @@
+---
+title: "Milestone report"
+author: "Oscar Rodriguez"
+date: "29 December 2015"
+output: html_document
+---
+# Getting and cleaning the data
+We download three files to be used as the corpora in English language (US) for building the next word prediction model. The Unix command `wc` (for word count), provides a raw summary on the files.
+ 
+ File | Lines | Words | bytes 
+------|------| ------|------
+en_US.blogs.txt | 899288| 37334690 | 210160014 
+en_US.news.txt | 1010242 | 34372720 | 205811889 
+en_US.twitter.txt| 2360148 | 30374206 | 167105338 
+
+## Profanity filtering
+Next, we proceed to clean the data. In this case, we start by applying a profanity filter by deleting all entries containing at least one of the words in a list of 21 common English profane words. 
+The `grep` (with option `-v` to exclude matches) achieves just that:
+```
+cat en_US.twitter.txt  | grep -vf en_profane_wordlist.txt  > en_US.twitter.pf.txt
+```
+We see that the number of filtered lines is negligible in relative terms, and thus shall not impact the model.
+
+File | Lines | Words | bytes |% lines removed
+------|------| ------|------|------
+en_US.blogs.pf.txt |  891330 | 36666585 | 206506505 | `r round((1-891330/899288)*100,2)`
+en_US.news.pf.txt | 1009850 | 34349793 | 205679018 | `r round((1-1009850/1010242)*100,2)`
+en_US.twitter.pf.txt | 2309348 | 29638990 | 163283024 | `r round((1-2309348/2360148)*100,2)` 
+
+Note that a higher number of entries are removed from twitter, which was to be expected, being a more lightly moderated communication platform.
+
+## Sentence segmentation and tokenization
+
+We perform word tokenization of the resulting files. At this stage the objective is obtaining the counts of distinct words in each file. For this task we made the following decisions:
+
+1. converting all words to lower case, which should simplify analysis, and reduce the number of tokens, thus simplifying the overall model.
+2. removing all punctuation from the dataset. New lines replace periods, this will be important for n-gram extraction. Note that this will not deal with items containing punctuation such as URLs or abbreviations, which we assume will not be significant in the overall model.
+3. removing all tokens containing non alphabetic characters (this will be our definition of word or unigram).
+
+### Unigram extraction
+We apply the rules describes above for unigram extraction. The UNIX command below generate a file with a unigram and  its associated count in the source file. 
+
+```
+cat en_US.twitter.pf.txt | tr '[:upper:]' '[:lower:]' | tr -d '[:punct:]' | tr ' ' '\n' |  tr -d ' ' | grep  [a-z] | grep -v [0-9]| sort > twitter_unigrams.txt
+cat twitter_unigrams.txt | uniq -c | sort -rn > twitter_unigrams_counts.txt
+```
+
+
+## bigram extraction
+
+For bigram extraction we paste the rows in two files containing the ordered unigrams, after creating a 1 row displacement in the second file.
+This technique is followed for successive extractions
+```
+cat en_US.twitter.txt | tr '[:upper:]' '[:lower:]' | tr -d '[:punct:]' | sed 's/,//' | sed G | tr ' ' '\n' > tmp.txt
+  tail -n+2 tmp.txt > tmp2.txt  
+  paste -d ',' tmp.txt tmp2.txt | grep -v -e "^," | grep -v -e ",$"|grep  -e "^[a-z]*,[a-z]*$"  | sort | uniq -c | sort -rn > twitter_bigrams_counts.txt
+```
+
+Higher order ngrams are extracted in an analog manner.
+ 
+## Exploratory data analysis
+
+## unigrams
+
+The  table below reports summary data on the unigram frequencies per source file.
+
+```{r read_unigrams, echo=FALSE, cache=TRUE}
+
+read_ngrams<-function(myfile)
+{
+  mytable<-read.table(myfile)
+  names(mytable)<-c("count", "ngram")
+  mytable$cumfreq<- cumsum(mytable$count/sum(mytable$count))
+  mytable
+}
+
+getquantiles<-function(mydf)
+{
+  quantile(mydf$count,  probs = c (50,75, 90)/100)
+}
+
+twitter_uni <- read_ngrams("~/Documents/Oscar/CourseraCapstone/en_US/twitter_unigrams_counts.txt")
+twitter_q <- getquantiles(twitter_uni)
+
+blogs_uni <- read_ngrams("~/Documents/Oscar/CourseraCapstone/en_US/blogs_unigrams_counts.txt")
+blogs_q <- getquantiles(blogs_uni)
+
+news_uni <- read_ngrams("~/Documents/Oscar/CourseraCapstone/en_US/news_unigrams_counts.txt")
+news_q <- getquantiles(news_uni)
+```
+
+File | distinct unigrams | total unigrams | 50% |75% |90% | Max
+------|------| ------|------|------|------|------
+blogs |  `r length(blogs_uni$unigram)` | `r sum(blogs_uni$count)` | `r blogs_q[1]` | `r blogs_q[2]` | `r blogs_q[3]` | `r max(blogs_uni$count)`
+news |  `r length(news_uni$unigram)` | `r sum(news_uni$count)`  | `r news_q[1]` | `r news_q[2]` | `r news_q[3]` | `r max(news_uni$count)`
+twitter |  `r length(twitter_uni$unigram)` | `r sum(twitter_uni$count)`  | `r twitter_q[1]` | `r twitter_q[2]` | `r twitter_q[3]` | `r max(twitter_uni$count)`
+
+Note that most unigrams have relatively low frequencies when compared to the maximum counts, and therefore, we will be able to achieve relatively good coverage of the unigram occurrences in a file while keeping a relatively small number of unigrams. 
+We can analyse the coverage by ordering the unigrams by decreasing count and calculating the cumulative sum of probability density.
+
+```{r plot_unigrams, echo=FALSE,cache=TRUE}
+
+addprobabilitysegment<-function(myprobs,p, col)
+{
+  segments(which(myprobs > p)[1], p, which(myprobs > p)[1], 0, col= col, lwd = 2,lty="dashed")
+  segments(which(myprobs > p)[1], p, 0, p, col= col, lwd = 2, lty = "dashed")
+}
+
+plotCumulativeProbability<-function(v,title)
+{
+  
+  index<-which( v$cumfreq > 0.9)[1]
+  plot(v$cumfreq[1:index], type='s', ylab = "cumulative probability" , main = title)
+  addprobabilitysegment(v$cumfreq,0.5, "blue")
+  addprobabilitysegment(v$cumfreq,0.9, "red")
+}
+
+par(mfrow=c(1,3))
+plotCumulativeProbability(twitter_uni, "twitter")
+plotCumulativeProbability(news_uni, "news")
+plotCumulativeProbability(blogs_uni, "blogs")
+```
+The plots above depict the accumulated probability of covering a given unigram occurrence in a file when keeping the previous unigrams. The 50% coverage probability and 90% coverage probability (red) are represented.
+The plots have been "cut" in order to improve the display of the above mention coverage points.
+The table below summarizes this information.
+
+File | count 50% coverage| percentage 50%  coverage| count  90% coverage | percentage  90% coverage
+------|------| ------|------|------
+blogs |  `r which(blogs_uni$cumfreq>0.5)[1]` | `r round(which(blogs_uni$cumfreq>0.5)[1]/length(blogs_uni$cumfreq)*100,2)` |  `r which(blogs_uni$cumfreq>0.9)[1]` | `r round(which(blogs_uni$cumfreq>0.9)[1]/length(blogs_uni$cumfreq)*100,2)`
+news |  `r which(news_uni$cumfreq>0.5)[1]` | `r round(which(news_uni$cumfreq>0.5)[1]/length(news_uni$cumfreq)*100,2)` |  `r which(news_uni$cumfreq>0.9)[1]` | `r round(which(news_uni$cumfreq>0.9)[1]/length(news_uni$cumfreq)*100,2)`
+twitter |  `r which(twitter_uni$cumfreq>0.5)[1]` | `r round(which(twitter_uni$cumfreq>0.5)[1]/length(twitter_uni$cumfreq)*100,2)` |  `r which(twitter_uni$cumfreq>0.9)[1]` | `r round(which(twitter_uni$cumfreq>0.9)[1]/length(twitter_uni$cumfreq)*100,2)`
+
+As an example, we can cover 50%  of the overall unigram occurrences in the blogs file by keeping the  round(which(blogs_uni$cumfreq>0.5)[1]/length(blogs_uni$cumfreq)*100,2)` % most frequent unigrams (or a total `r which(blogs_uni$cumfreq>0.5)[1]` of the `r length(blogs_uni$cumfreq)` unique unigrams in the source file) .
+
+## bigrams
+In this section, we perform the same analysis for the case of bigrams.
+```{r read_bigrams, cache=TRUE, echo=FALSE}
+twitter_bi <- read_ngrams("~/Documents/Oscar/CourseraCapstone/en_US/twitter_bigrams_counts.txt")
+twitter_q <- getquantiles(twitter_bi)
+
+
+blogs_bi <- read_ngrams("~/Documents/Oscar/CourseraCapstone/en_US/blogs_bigrams_counts.txt")
+blogs_q <- getquantiles(blogs_bi)
+
+news_bi <- read_ngrams("~/Documents/Oscar/CourseraCapstone/en_US/news_bigrams_counts.txt")
+news_q <- getquantiles(news_bi)
+
+```
+
+File | distinct unigrams | total unigrams | 50% |75% |90% | Max
+------|------| ------|------|------|------|------
+blogs |  `r length(blogs_bi$bigram)` | `r sum(blogs_bi$count)` | `r blogs_q[1]` | `r blogs_q[2]` | `r blogs_q[3]` | `r max(blogs_bi$count)`
+news |  `r length(news_bi$bigram)` | `r sum(news_bi$count)`  | `r news_q[1]` | `r news_q[2]` | `r news_q[3]` | `r max(news_bi$count)`
+twitter |  `r length(twitter_bi$biigram)` | `r sum(twitter_bi$count)`  | `r twitter_q[1]` | `r twitter_q[2]` | `r twitter_q[3]` | `r max(twitter_bi$count)`
+
+```{r plot_bigrams, cache=TRUE, echo=FALSE}
+par(mfrow=c(1,3))
+ plotCumulativeProbability(twitter_bi, "twitter")
+ plotCumulativeProbability(news_bi, "news")
+ plotCumulativeProbability(blogs_bi, "blogs")
+```
+
+File | count 50% coverage| percentage 50%  coverage| count  90% coverage | percentage  90% coverage
+------|------| ------|------|------
+blogs |  `r which(blogs_uni$cumfreq>0.5)[1]` | `r round(which(blogs_bi$cumfreq>0.5)[1]/length(blogs_bi$cumfreq)*100,2)` |  `r which(blogs_bi$cumfreq>0.9)[1]` | `r round(which(blogs_bi$cumfreq>0.9)[1]/length(blogs_bi$cumfreq)*100,2)`
+news |  `r which(news_bi$cumfreq>0.5)[1]` | `r round(which(news_bi$cumfreq>0.5)[1]/length(news_bi$cumfreq)*100,2)` |  `r which(news_bi$cumfreq>0.9)[1]` | `r round(which(news_bi$cumfreq>0.9)[1]/length(news_bi$cumfreq)*100,2)`
+twitter |  `r which(twitter_bi$cumfreq>0.5)[1]` | `r round(which(twitter_bi$cumfreq>0.5)[1]/length(twitter_bi$cumfreq)*100,2)` |  `r which(twitter_bi$cumfreq>0.9)[1]` | `r round(which(twitter_bi$cumfreq>0.9)[1]/length(twitter_bi$cumfreq)*100,2)`
+
+Note that as there are more combinations of bigrams, the probability is spread among more distinct unigrams, and hence the need to keep a higher percentage of bigrams in order to reach the same coverage. 
+It is expected that this trend will be kept in the case of higher order ngrams.
+
+# Conclusions
+
+The figure below depicts the counts of distinct n-grams per source file. We see that  as we increase the number of words providing context to the next work prediction model, the required memory to keep the n-grams will increase, and the prediction performance will decrease, as more ngrams are to be searched.
+
+```{r fig1, echo=FALSE}
+file<-c("twitter","twitter","twitter","news","news","news","blogs","blogs", "blogs")
+ngram<-c("unigram", "bigram", "trigram","unigram", "bigram", "trigram","unigram", "bigram", "trigram")
+count<-c(531591,4472435,11342874,367316,5848784,16491184, 445405,5924522,17688365)
+count_trend<-data.frame(file,ngram,count)
+count_trend$ngram =factor(count_trend$ngram,levels(count_trend$ngram)[c(3,1,2)])
+library(ggplot2)
+ggplot(count_trend, aes(x = ngram, y = count, group = file, colour=file), log10="y")+  scale_y_continuous(breaks=c(1000000,5000000,10000000))+ geom_line()
+```
+
+In order to keep the performance acceptable, we need to study the trade-off between model accuracy and performance.
+As a starting point we will use the coverage analysis from the previous section. 
+We may keep for the initial model only the most frequent ngrams, such that each subset ensures 50% coverage of the three files combined.
+
+# Next steps
+
+* Build parametric back-off prediction model based on coverage analysis (e.g. start by 50% coverage)
+* Estimate and compare accuracy of each model as we increase coverage, using a sample of the data, and other estimation techniques (e.g. perplexity)
+* Estimate performance and memory requirements using Rprof(), gc(), object.size()
+* optimize model data structure to increase performance and decrease memory requirements, for example by using a look up table for unigrams and storing n-grams as tuples of small integers.
