@@ -1,0 +1,8 @@
+name: PredictNextWord
+account: lordgas
+server: shinyapps.io
+bundleId: 343170
+url: https://lordgas.shinyapps.io/PredictNextWord
+when: 1451953477.71668
+asMultiple: FALSE
+asStatic: FALSE
